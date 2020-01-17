@@ -125,7 +125,7 @@ router.post('/post', function (req, res) {
   const { post, mode } = req.body;
   const { given_name, family_name, email, picture } = req.user;
   try {
-    if (!mode || !post) throw 'NO_POST_ID';
+    if (mode === undefined || !post) throw 'NO_POST_ID';
     db.collection('forum').find().sort({ id: -1 }).limit(1).toArray((err, result) => {
       if (err) return res.json({ error: 'POST_NOT_FOUND' });
       const latest_id = result.length ? result[0].id : 0;
