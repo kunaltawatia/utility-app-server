@@ -113,7 +113,7 @@ function notify(post, user) {
   db.collection('user').find({}).toArray((err, result) => {
     let usersToNotify = [];
     for (let device of result) {
-        if (device.expoPushToken) {
+      if (device.expoPushToken) {
         usersToNotify.push(device.expoPushToken);
       }
     }
@@ -158,7 +158,7 @@ router.post('/getPost', (req, res) => {
     if (!id) throw 'NO_POST_ID';
     db.collection('forum').findOne({ id }, (err, post) => {
       if (err || !post) return res.json({ error: 'POST_NOT_FOUND' });
-      res.json({ post , me: req.user });
+      res.json({ post, me: req.user });
     })
   } catch (error) {
     res.json({ error });
@@ -274,6 +274,62 @@ router.post('/editComment', (req, res) => {
       });
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
       res.json({ error: false });
+    })
+  } catch (error) {
+    res.json({ error })
+  }
+});
+
+router.get('/getRatings', (req, res) => {
+  const userEmail = req.user.email;
+  try {
+    var rated = [0, 0, 0],
+      ratings = [{ avgRating: 0, polls: 0 }, { avgRating: 0, polls: 0 }, { avgRating: 0, polls: 0 }];
+    db.collection('ratings').find().toArray((err, result) => {
+      if (result && result.length)
+        result.map(user => {
+          if (user.email === userEmail) rated = user.rated;
+          user.rated.map((mealRating, mealIndex) => {
+            if (mealRating) {
+              ratings[mealIndex].avgRating += mealRating;
+              ratings[mealIndex].polls += 1;
+            }
+          })
+        })
+
+      ratings = ratings.map(meal => {
+        if (meal.polls) {
+          meal.avgRating /= meal.polls;
+        }
+        return meal;
+      })
+      res.json({ rated, ratings });
+    })
+  } catch (error) {
+    res.json({ error })
+  }
+});
+
+router.post('/rateFood', (req, res) => {
+  const { rating, mealIndex } = req.body;
+  const userEmail = req.user.email;
+  try {
+    db.collection('ratings').findOne({ email: userEmail }, (err, user) => {
+      if (err) return res.json({ error: true });
+      else if (user) {
+        const newRating = user.rated.map((r, index) => {
+          if (index === mealIndex) return rating;
+          return r;
+        });
+        db.collection('ratings').findOneAndUpdate({ email: userEmail }, { $set: { rated: newRating } });
+        res.json({});
+      }
+      else {
+        var rated = [0, 0, 0];
+        rated[mealIndex] = rating;
+        db.collection('ratings').insert({ email: userEmail, rated });
+        res.json({});
+      }
     })
   } catch (error) {
     res.json({ error })
