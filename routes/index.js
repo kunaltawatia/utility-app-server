@@ -37,6 +37,7 @@ CHECK_FOR_IITIAN = async (req, res, next) => {
   }
   else {
     const user = await getUser(accessToken);
+    console.log(user);
     if (!user.email || user.hd !== 'iitj.ac.in') {
       res.json({ error: 'NOT_IITIAN' });
     } else {
@@ -44,7 +45,7 @@ CHECK_FOR_IITIAN = async (req, res, next) => {
         if (err) return console.error(err);
         if (prev_user) {
           removeViews(prev_user.viewed);
-          db.collection('user').findOneAndUpdate({ accessToken: prev_user.accessToken }, { $set: { accessToken, viewed: 0 } });
+          db.collection('user').findOneAndUpdate({ email: user.email }, { $set: { accessToken, ...user, viewed: 0 } });
           if (prev_user.blacklisted) {
             res.json({ error: 'UNAUTHENTICATED' });
           }
@@ -157,7 +158,7 @@ router.post('/getPost', (req, res) => {
     if (!id) throw 'NO_POST_ID';
     db.collection('forum').findOne({ id }, (err, post) => {
       if (err || !post) return res.json({ error: 'POST_NOT_FOUND' });
-      res.json({ post: { ...post, comments: post.comments.reverse() }, me: req.user });
+      res.json({ post , me: req.user });
     })
   } catch (error) {
     res.json({ error });
