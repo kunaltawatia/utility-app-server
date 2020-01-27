@@ -123,7 +123,7 @@ function notify(post, user) {
 }
 
 router.post('/post', function (req, res) {
-  const { post, mode } = req.body;
+  const { post, mode, anonymous } = req.body;
   const { given_name, family_name, email, picture } = req.user;
   try {
     if (mode === undefined || !post) throw 'NO_POST_ID';
@@ -142,7 +142,8 @@ router.post('/post', function (req, res) {
         likes: [],
         comments: [],
         views: 0,
-        id: latest_id + 1
+        id: latest_id + 1, 
+        anonymous
       });
       res.json({ error: false });
     });
@@ -173,6 +174,7 @@ router.post('/editPost', function (req, res) {
       if (err || !prev_post) return res.json({ error: 'POST_NOT_FOUND' });
       if (prev_post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
       db.collection('forum').findOneAndUpdate({ id }, { $set: { post } });
+      db.collection('dump').insert({ prev: prev_post, new : post });
       res.json({ error: false });
     });
   }
@@ -189,6 +191,7 @@ router.post('/deletePost', (req, res) => {
       if (err || !post) return res.json({ error: 'POST_NOT_FOUND' });
       if (post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
       db.collection('forum').findOneAndDelete({ id });
+      db.collection('dump').insert({ prev: post, new : '' });
       res.json({ error: false });
     })
   } catch (error) {
@@ -220,7 +223,7 @@ router.post('/like', function (req, res) {
 });
 
 router.post('/postComment', (req, res) => {
-  const { id, comment } = req.body;
+  const { id, comment, anonymous } = req.body;
   const { given_name, email, picture, family_name } = req.user;
   try {
     if (!id || !comment) throw 'NO_POST_ID';
@@ -233,7 +236,8 @@ router.post('/postComment', (req, res) => {
         author: given_name,
         picture,
         email,
-        badge: family_name.split('').filter(char => char !== '(' && char !== ')').join('')
+        badge: family_name.split('').filter(char => char !== '(' && char !== ')').join(''),
+        anonymous
       })
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
       res.json({ error: false });
@@ -252,6 +256,7 @@ router.post('/deleteComment', (req, res) => {
       var { comments } = post;
       comments = comments.filter(prev_comment => (prev_comment.author !== req.user.given_name && !req.user.admin) || prev_comment.createdAt !== comment.createdAt);
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
+      db.collection('dump').insert({ prev: post.comments, new : comments });
       res.json({ error: false });
     })
   } catch (error) {
@@ -273,6 +278,7 @@ router.post('/editComment', (req, res) => {
         else return prev_comment;
       });
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
+      db.collection('dump').insert({ prev: post.comments, new : comments });
       res.json({ error: false });
     })
   } catch (error) {
