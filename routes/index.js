@@ -10,15 +10,19 @@ MongoClient.connect('mongodb://localhost:27017/utility', function (err, client) 
   db = client.db('utility');
 })
 
+refreshDay= ()=>{
+  db.collection('ratings').find({}).toArray((err, ratings) => {
+      db.collection('dailyRatings').insert({
+        date: new Date().toString(),
+        ratings
+      });
+      db.collection('ratings').remove({});
+  })
+}
+
 setInterval(() => {
   if (new Date().getHours() === 0) {
-    db.collection('ratings').find({}).toArray((err, ratings) => {
-        db.collection('dailyRatings').insert({
-          date: new Date().toString(),
-          ratings
-        });
-        db.collection('ratings').remove({});
-    })
+    refreshDay();
   }
 }, 1 * 60 * 60 * 1000);
 
