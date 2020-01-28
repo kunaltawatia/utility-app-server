@@ -10,6 +10,18 @@ MongoClient.connect('mongodb://localhost:27017/utility', function (err, client) 
   db = client.db('utility');
 })
 
+setInterval(() => {
+  if (new Date().getHours() === 0) {
+    db.collection('ratings').find({}).toArray((err, ratings) => {
+        db.collection('dailyRatings').insert({
+          date: new Date().toString(),
+          ratings
+        });
+        db.collection('ratings').remove({});
+    })
+  }
+}, 1 * 60 * 60 * 1000);
+
 getUser = async (accessToken) => {
   try {
     const reponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
@@ -142,7 +154,7 @@ router.post('/post', function (req, res) {
         likes: [],
         comments: [],
         views: 0,
-        id: latest_id + 1, 
+        id: latest_id + 1,
         anonymous
       });
       res.json({ error: false });
@@ -174,7 +186,7 @@ router.post('/editPost', function (req, res) {
       if (err || !prev_post) return res.json({ error: 'POST_NOT_FOUND' });
       if (prev_post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
       db.collection('forum').findOneAndUpdate({ id }, { $set: { post } });
-      db.collection('dump').insert({ prev: prev_post, new : post });
+      db.collection('dump').insert({ prev: prev_post, new: post });
       res.json({ error: false });
     });
   }
@@ -191,7 +203,7 @@ router.post('/deletePost', (req, res) => {
       if (err || !post) return res.json({ error: 'POST_NOT_FOUND' });
       if (post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
       db.collection('forum').findOneAndDelete({ id });
-      db.collection('dump').insert({ prev: post, new : '' });
+      db.collection('dump').insert({ prev: post, new: '' });
       res.json({ error: false });
     })
   } catch (error) {
@@ -256,7 +268,7 @@ router.post('/deleteComment', (req, res) => {
       var { comments } = post;
       comments = comments.filter(prev_comment => (prev_comment.author !== req.user.given_name && !req.user.admin) || prev_comment.createdAt !== comment.createdAt);
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
-      db.collection('dump').insert({ prev: post.comments, new : comments });
+      db.collection('dump').insert({ prev: post.comments, new: comments });
       res.json({ error: false });
     })
   } catch (error) {
@@ -278,7 +290,7 @@ router.post('/editComment', (req, res) => {
         else return prev_comment;
       });
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
-      db.collection('dump').insert({ prev: post.comments, new : comments });
+      db.collection('dump').insert({ prev: post.comments, new: comments });
       res.json({ error: false });
     })
   } catch (error) {
