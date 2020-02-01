@@ -12,6 +12,8 @@ MongoClient.connect('mongodb://localhost:27017/utility', function (err, client) 
 
 getUser = async (accessToken) => {
   try {
+    if (!accessToken)
+      return { email: false }
     const reponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
@@ -28,7 +30,7 @@ CHECK_FOR_IITIAN = async (req, res, next) => {
   var user = await db.collection('user').findOne({ accessToken });
   if (user) {
     if (user.blacklisted) {
-      res.json({ error: 'UNAUTHENTICATED' });
+      getLatestPostID(latest_id => res.json({ error: 'UNAUTHENTICATED', unseenPosts: latest_id }));
     }
     else {
       req.user = user;
@@ -37,9 +39,8 @@ CHECK_FOR_IITIAN = async (req, res, next) => {
   }
   else {
     const user = await getUser(accessToken);
-    console.log(user);
     if (!user.email || user.hd !== 'iitj.ac.in') {
-      res.json({ error: 'NOT_IITIAN' });
+      getLatestPostID(latest_id => res.json({ error: 'NOT_IITIAN', unseenPosts: latest_id }));
     } else {
       db.collection('user').findOne({ email: user.email }, (err, prev_user) => {
         if (err) return console.error(err);
@@ -47,7 +48,7 @@ CHECK_FOR_IITIAN = async (req, res, next) => {
           removeViews(prev_user.viewed);
           db.collection('user').findOneAndUpdate({ email: user.email }, { $set: { accessToken, ...user, viewed: 0 } });
           if (prev_user.blacklisted) {
-            res.json({ error: 'UNAUTHENTICATED' });
+            getLatestPostID(latest_id => res.json({ error: 'UNAUTHENTICATED', unseenPosts: latest_id }));
           }
           else {
             req.user = user;
@@ -70,6 +71,22 @@ addViews = (start) => {
 
 removeViews = (end) => {
   db.collection('forum').updateMany({ id: { $lt: end + 1 } }, { $inc: { views: -1 } });
+}
+
+getLatestPostID = (callback) => {
+  db.collection('latestPostID').findOne({}, (err, res) => {
+    callback((res && res.id) || 0);
+  });
+}
+
+increaseLatestPostID = () => {
+  db.collection('latestPostID').findOne({}, (err, res) => {
+    const latestWas = (res && res.id) || 0;
+    if (!res || !res.id)
+      db.collection('latestPostID').insertOne({ id: 1 });
+    else
+      db.collection('latestPostID').findOneAndUpdate({}, { $set: { id: latestWas + 1 } });
+  });
 }
 
 /* GET home page. */
@@ -127,9 +144,7 @@ router.post('/post', function (req, res) {
   const { given_name, family_name, email, picture } = req.user;
   try {
     if (mode === undefined || !post) throw 'NO_POST_ID';
-    db.collection('forum').find().sort({ id: -1 }).limit(1).toArray((err, result) => {
-      if (err) return res.json({ error: 'POST_NOT_FOUND' });
-      const latest_id = result.length ? result[0].id : 0;
+    getLatestPostID(latest_id => {
       if (mode == 2 && req.user.authorizedToNotify) notify(post, req.user);
       db.collection('forum').insertOne({
         post,
@@ -142,9 +157,10 @@ router.post('/post', function (req, res) {
         likes: [],
         comments: [],
         views: 0,
-        id: latest_id + 1, 
+        id: latest_id + 1,
         anonymous
       });
+      increaseLatestPostID();
       res.json({ error: false });
     });
   }
@@ -174,7 +190,7 @@ router.post('/editPost', function (req, res) {
       if (err || !prev_post) return res.json({ error: 'POST_NOT_FOUND' });
       if (prev_post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
       db.collection('forum').findOneAndUpdate({ id }, { $set: { post } });
-      db.collection('dump').insert({ prev: prev_post, new : post });
+      db.collection('dump').insert({ prev: prev_post, new: post });
       res.json({ error: false });
     });
   }
@@ -191,7 +207,7 @@ router.post('/deletePost', (req, res) => {
       if (err || !post) return res.json({ error: 'POST_NOT_FOUND' });
       if (post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
       db.collection('forum').findOneAndDelete({ id });
-      db.collection('dump').insert({ prev: post, new : '' });
+      db.collection('dump').insert({ prev: post, new: '' });
       res.json({ error: false });
     })
   } catch (error) {
@@ -256,7 +272,7 @@ router.post('/deleteComment', (req, res) => {
       var { comments } = post;
       comments = comments.filter(prev_comment => (prev_comment.author !== req.user.given_name && !req.user.admin) || prev_comment.createdAt !== comment.createdAt);
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
-      db.collection('dump').insert({ prev: post.comments, new : comments });
+      db.collection('dump').insert({ prev: post.comments, new: comments });
       res.json({ error: false });
     })
   } catch (error) {
@@ -278,7 +294,7 @@ router.post('/editComment', (req, res) => {
         else return prev_comment;
       });
       db.collection('forum').findOneAndUpdate({ id }, { $set: { comments } });
-      db.collection('dump').insert({ prev: post.comments, new : comments });
+      db.collection('dump').insert({ prev: post.comments, new: comments });
       res.json({ error: false });
     })
   } catch (error) {
@@ -339,6 +355,16 @@ router.post('/rateFood', (req, res) => {
     })
   } catch (error) {
     res.json({ error })
+  }
+});
+
+router.get('/unseenPosts', (req, res) => {
+  try {
+    getLatestPostID((latest_id) => {
+      res.json({ unseenPosts: latest_id - req.user.viewed });
+    });
+  } catch (error) {
+    res.json({ error });
   }
 });
 
