@@ -10,13 +10,13 @@ MongoClient.connect('mongodb://localhost:27017/utility', function (err, client) 
   db = client.db('utility');
 })
 
-refreshDay= ()=>{
+refreshDay = () => {
   db.collection('ratings').find({}).toArray((err, ratings) => {
-      db.collection('dailyRatings').insert({
-        date: new Date().toString(),
-        ratings
-      });
-      db.collection('ratings').remove({});
+    db.collection('dailyRatings').insert({
+      date: new Date().toString(),
+      ratings
+    });
+    db.collection('ratings').remove({});
   })
 }
 
@@ -121,9 +121,7 @@ router.get('/forum', function (req, res) {
   try {
     db.collection('forum').find().toArray((err, result) => {
       if (err) return res.json({ error: 'POST_NOT_FOUND' });
-      var max_id = 0;
       posts = result.map(post => {
-        max_id = Math.max(max_id, post.id);
         return {
           ...post,
           likes: post.likes.length,
@@ -133,10 +131,12 @@ router.get('/forum', function (req, res) {
         }
       })
       posts = posts.reverse();
-      db.collection('user').findOneAndUpdate({ accessToken: req.user.accessToken }, { $set: { viewed: max_id } });
       addViews(req.user.viewed);
+      getLatestPostID((max_id) => {
+        db.collection('user').findOneAndUpdate({ accessToken: req.user.accessToken }, { $set: { viewed: max_id } });
+      });
       res.json({ posts, user: req.user });
-    })
+    });
   } catch (error) {
     console.error(error);
   }
