@@ -156,7 +156,7 @@ function notify(post, user) {
 }
 
 router.post('/post', function (req, res) {
-  const { post, mode, anonymous } = req.body;
+  const { post, mode, anonymous, link } = req.body;
   const { given_name, family_name, email, picture } = req.user;
   try {
     if (mode === undefined || !post) throw 'NO_POST_ID';
@@ -164,6 +164,7 @@ router.post('/post', function (req, res) {
       if (mode == 2 && req.user.authorizedToNotify) notify(post, req.user);
       db.collection('forum').insertOne({
         post,
+        link,
         mode,
         createdAt: Date.now(),
         author: given_name,
@@ -199,13 +200,13 @@ router.post('/getPost', (req, res) => {
 });
 
 router.post('/editPost', function (req, res) {
-  const { id, post } = req.body;
+  const { id, post, link } = req.body;
   try {
     if (!id || !post) throw 'NO_POST_ID';
     db.collection('forum').findOne({ id }, (err, prev_post) => {
       if (err || !prev_post) return res.json({ error: 'POST_NOT_FOUND' });
       if (prev_post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
-      db.collection('forum').findOneAndUpdate({ id }, { $set: { post } });
+      db.collection('forum').findOneAndUpdate({ id }, { $set: { post, link } });
       db.collection('dump').insert({ prev: prev_post, new: post });
       res.json({ error: false });
     });
