@@ -204,7 +204,14 @@ router.post('/getPost', (req, res) => {
     if (!id) throw 'NO_POST_ID';
     db.collection('forum').findOne({ id }, (err, post) => {
       if (err || !post) return res.json({ error: 'POST_NOT_FOUND' });
-      res.json({ post, me: req.user });
+      post.voted = '';
+      if (post.poll) {
+        post.votes.map(vote => {
+          if (vote.email === req.user.email)
+            post.voted = vote.option;
+        })
+      }
+      res.json({ post, me: req.user});
     })
   } catch (error) {
     res.json({ error });
