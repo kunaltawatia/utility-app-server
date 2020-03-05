@@ -122,12 +122,20 @@ router.get('/forum', function (req, res) {
     db.collection('forum').find().toArray((err, result) => {
       if (err) return res.json({ error: 'POST_NOT_FOUND' });
       posts = result.map(post => {
+        var voted = '';
+        if (post.poll) {
+          post.votes.map(vote => {
+            if (vote.email === req.user.email)
+              voted = vote.option;
+          })
+        }
         return {
           ...post,
           likes: post.likes.length,
           comments: post.comments.length,
           liked: post.likes.includes(req.user.email),
-          views: post.views + (post.id > req.user.viewed ? 1 : 0)
+          views: post.views + (post.id > req.user.viewed ? 1 : 0),
+          voted
         }
       })
       posts = posts.reverse();
@@ -156,7 +164,7 @@ function notify(post, user) {
 }
 
 router.post('/post', function (req, res) {
-  const { post, mode, anonymous, link } = req.body;
+  const { post, mode, anonymous, link, poll, option1, option2 } = req.body;
   const { given_name, family_name, email, picture } = req.user;
   try {
     if (mode === undefined || !post) throw 'NO_POST_ID';
@@ -175,7 +183,11 @@ router.post('/post', function (req, res) {
         comments: [],
         views: 0,
         id: latest_id + 1,
-        anonymous
+        anonymous,
+        poll,
+        option1,
+        option2,
+        votes: []
       });
       increaseLatestPostID();
       res.json({ error: false });
@@ -200,13 +212,13 @@ router.post('/getPost', (req, res) => {
 });
 
 router.post('/editPost', function (req, res) {
-  const { id, post, link } = req.body;
+  const { id, post, link, option1, option2 } = req.body;
   try {
     if (!id || !post) throw 'NO_POST_ID';
     db.collection('forum').findOne({ id }, (err, prev_post) => {
       if (err || !prev_post) return res.json({ error: 'POST_NOT_FOUND' });
       if (prev_post.email !== req.user.email && !req.user.admin) return res.json({ error: 'UNAUTHORISED' });
-      db.collection('forum').findOneAndUpdate({ id }, { $set: { post, link } });
+      db.collection('forum').findOneAndUpdate({ id }, { $set: { post, link, option1, option2 } });
       db.collection('dump').insert({ prev: prev_post, new: post });
       res.json({ error: false });
     });
@@ -247,6 +259,25 @@ router.post('/like', function (req, res) {
         likes.push(email);
       }
       db.collection('forum').updateOne({ id }, { $set: { likes } });
+      res.json({ error: false });
+    });
+  }
+  catch (err) {
+    res.json({ error: true });
+  }
+});
+
+router.post('/vote', function (req, res) {
+  const { id, option } = req.body;
+  const { email } = req.user;
+  try {
+    if (!id) throw 'NO_POST_ID';
+    db.collection('forum').findOne({ id }, (err, post) => {
+      if (err || !post) return res.json({ error: 'POST_NOT_FOUND' });
+      var { votes } = post;
+      votes = votes.filter(vote => vote.email !== email);
+      votes.push({ email, option });
+      db.collection('forum').updateOne({ id }, { $set: { votes } });
       res.json({ error: false });
     });
   }
